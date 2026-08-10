@@ -48,6 +48,12 @@ header.site {
 
 .brand span { color: var(--accent); }
 
+.brand img {
+  height: 52px;
+  width: auto;
+  display: block;
+}
+
 .nav a.link {
   color: var(--muted);
   text-decoration: none;
