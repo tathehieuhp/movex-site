@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authorization Callback — MoveX</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="/">Move<span>X</span></a>
+  </nav>
+</header>
+
+<main>
+  <h1>Authorization Callback</h1>
+  <p id="msg">Đang đọc tham số ủy quyền…</p>
+  <div id="result" style="display:none">
+    <p>✅ Đã nhận được <strong>auth code</strong> từ TikTok. Sao chép mã dưới đây và dán vào công cụ nội bộ:</p>
+    <p><code id="code" style="display:block;background:#f6f3fb;border:1px solid #e6e0f0;border-radius:8px;padding:14px;word-break:break-all;font-size:15px"></code></p>
+    <p><button id="copy" style="background:#6a2fb8;color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:15px;cursor:pointer">📋 Sao chép mã</button> <span id="copied" style="color:#1a9e55;display:none">Đã sao chép!</span></p>
+  </div>
+</main>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var code = params.get('auth_code') || params.get('code');
+  var msg = document.getElementById('msg');
+  if (code) {
+    msg.style.display = 'none';
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('code').textContent = code;
+    document.getElementById('copy').addEventListener('click', function () {
+      navigator.clipboard.writeText(code).then(function () {
+        document.getElementById('copied').style.display = 'inline';
+      });
+    });
+  } else {
+    msg.textContent = 'Không tìm thấy mã ủy quyền trong URL. Trang này chỉ dùng làm điểm nhận callback khi authorize TikTok Marketing API.';
+  }
+})();
+</script>
+</body>
+</html>
