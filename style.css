@@ -243,3 +243,15 @@ footer.site {
   .hero-copy h1 { font-size: 32px; }
   .hero-img img { max-height: 380px; }
 }
+
+.legal {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 14px 24px 28px;
+  border-top: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.legal p { margin: 6px 0; }
+.legal a { color: var(--muted); }
