@@ -3,10 +3,15 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Chạy Worker gần máy chủ Anthropic (Mỹ) thay vì ở điểm biên gần khách.
-# Điểm biên Hong Kong (HKG) bị Anthropic từ chối với lỗi 403.
-[placement]
-mode = "smart"
+# Lời gọi Claude chạy trong Durable Object ghim ở Bắc Mỹ (xem src/index.js),
+# vì điểm biên Hong Kong (HKG) bị Anthropic từ chối với lỗi 403.
+[[durable_objects.bindings]]
+name = "CHAT"
+class_name = "ClaudeProxy"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClaudeProxy"]
 
 [vars]
 # Model dùng khi request không chỉ định, hoặc chỉ định model ngoài danh sách cho phép.

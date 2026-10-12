@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { DurableObject } from "cloudflare:workers";
 import { SYSTEM_PROMPT } from "./system-prompt.js";
 
 const MAX_MESSAGES = 20;
@@ -7,6 +8,11 @@ const MAX_OUTPUT_TOKENS = 4096;
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 // Models that accept the server-side refusal fallback in its "default" form.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
+// Durable Objects are pinned where they are first created. Anthropic rejects
+// requests from some edge locations (e.g. Hong Kong), so the Claude call runs
+// inside objects created in eastern North America instead of at the edge.
+const PROXY_LOCATION = "enam";
+const PROXY_POOL_SIZE = 4;
 
 function parseList(value) {
   return (value || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -52,12 +58,69 @@ function sanitizeMessages(input) {
   return messages;
 }
 
+export class ClaudeProxy extends DurableObject {
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/health") {
+      const trace = await fetch("https://www.cloudflare.com/cdn-cgi/trace").then((r) => r.text());
+      const colo = (trace.match(/^colo=(.*)$/m) || [])[1] || "unknown";
+      return json({ colo }, 200, {});
+    }
+
+    const params = await request.json();
+    const client = new Anthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
+    const encoder = new TextEncoder();
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const send = (obj) => writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+
+    const run = async () => {
+      try {
+        const stream = client.beta.messages.stream(params);
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            await send({ text: event.delta.text });
+          }
+        }
+        const final = await stream.finalMessage();
+        if (final.stop_reason === "refusal") {
+          await send({ error: "Xin lỗi, tôi không thể trả lời câu hỏi này." });
+        }
+        await send({ done: true });
+      } catch (err) {
+        console.error("Claude API error", err instanceof Anthropic.APIError ? err.status : "", err?.message);
+        const message =
+          err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)
+            ? "Trợ lý đang quá tải, vui lòng thử lại sau."
+            : "Đã có lỗi xảy ra, vui lòng thử lại.";
+        await send({ error: message });
+      } finally {
+        await writer.close();
+      }
+    };
+    this.ctx.waitUntil(run());
+
+    return new Response(readable, {
+      headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  }
+}
+
+function proxyStub(env) {
+  const name = `proxy-${Math.floor(Math.random() * PROXY_POOL_SIZE)}`;
+  return env.CHAT.get(env.CHAT.idFromName(name), { locationHint: PROXY_LOCATION });
+}
+
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const origin = request.headers.get("Origin");
     const cors = corsHeaders(origin, env);
+    const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    if (request.method === "GET" && url.pathname === "/health") {
+      return proxyStub(env).fetch("https://proxy/health");
+    }
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, cors);
     if (!cors["Access-Control-Allow-Origin"]) return json({ error: "Origin not allowed" }, 403, cors);
 
@@ -90,45 +153,13 @@ export default {
       params.fallbacks = "default";
     }
 
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-    const encoder = new TextEncoder();
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const send = (obj) => writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-
-    const run = async () => {
-      try {
-        const stream = client.beta.messages.stream(params);
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            await send({ text: event.delta.text });
-          }
-        }
-        const final = await stream.finalMessage();
-        if (final.stop_reason === "refusal") {
-          await send({ error: "Xin lỗi, tôi không thể trả lời câu hỏi này." });
-        }
-        await send({ done: true });
-      } catch (err) {
-        console.error("Claude API error", err instanceof Anthropic.APIError ? err.status : "", err?.message);
-        const message =
-          err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)
-            ? "Trợ lý đang quá tải, vui lòng thử lại sau."
-            : "Đã có lỗi xảy ra, vui lòng thử lại.";
-        await send({ error: message });
-      } finally {
-        await writer.close();
-      }
-    };
-    // Keep the Worker alive until streaming finishes.
-    ctx.waitUntil(run());
-
-    return new Response(readable, {
-      headers: {
-        ...cors,
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache",
-      },
+    const upstream = await proxyStub(env).fetch("https://proxy/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
     });
+    const headers = new Headers(upstream.headers);
+    for (const [k, v] of Object.entries(cors)) headers.set(k, v);
+    return new Response(upstream.body, { status: upstream.status, headers });
   },
 };
