@@ -1,0 +1,31 @@
+name = "movex-chat"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Chạy Worker gần máy chủ Anthropic (Mỹ) thay vì ở điểm biên gần khách.
+# Điểm biên Hong Kong (HKG) bị Anthropic từ chối với lỗi 403.
+[placement]
+mode = "smart"
+
+[vars]
+# Model dùng khi request không chỉ định, hoặc chỉ định model ngoài danh sách cho phép.
+DEFAULT_MODEL = "claude-opus-5-5"
+# Các model mà widget được phép chọn qua thuộc tính data-model.
+ALLOWED_MODELS = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
+# Mức effort: low | medium | high | xhigh | max. "low" phù hợp hỏi đáp ngắn.
+EFFORT = "low"
+# Các domain được gọi Worker (thêm localhost để thử local).
+ALLOWED_ORIGINS = "https://movex.info.vn,https://www.movex.info.vn,http://localhost:8000"
+
+# Giới hạn 20 request/phút cho mỗi IP.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# API key KHÔNG đặt ở đây. Đặt bằng lệnh: npx wrangler secret put ANTHROPIC_API_KEY
+# Khi chạy local, tạo file .dev.vars (đã gitignore) chứa ANTHROPIC_API_KEY=...

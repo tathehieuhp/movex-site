@@ -1,3 +1,7 @@
 product-movex.png
 Bột tẩy lồng máy giặt MoveX.jpg
 Logo MoveX 1.png
+
+node_modules/
+.dev.vars
+.wrangler/
