@@ -15,7 +15,7 @@ new_sqlite_classes = ["ClaudeProxy"]
 
 [vars]
 # Model dùng khi request không chỉ định, hoặc chỉ định model ngoài danh sách cho phép.
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "claude-haiku-5-5"
 # Các model mà widget được phép chọn qua thuộc tính data-model.
 ALLOWED_MODELS = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 # Mức effort: low | medium | high | xhigh | max. "low" phù hợp hỏi đáp ngắn.
